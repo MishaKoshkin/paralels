@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <memory>
 #include <omp.h>
 
 int main() {
@@ -16,9 +17,9 @@ int main() {
         int n = sizes[s];
         double base_time = 0.0;
         
-        double* a = new double[m * n];
-        double* b = new double[n];
-        double* c = new double[m];
+        std::unique_ptr<double[]> a = std::make_unique<double[]>(m*n);
+        std::unique_ptr<double[]> b = std::make_unique<double[]>(n);
+        std::unique_ptr<double[]> c = std::make_unique<double[]>(m);
 
         omp_set_num_threads(max_threads);
         #pragma omp parallel
@@ -41,6 +42,7 @@ int main() {
         for (int j = 0; j < n; j++) {
             b[j] = j;
         }
+        
 
         for (int t = 0; t < 8; t++) {
             int num_threads = threads[t];
@@ -81,9 +83,7 @@ int main() {
             std::cout << num_threads << " " << time << " " << speedup << std::endl;
             outfile << m << " " << num_threads << " " << time << " " << speedup << std::endl;
             
-            delete[] a;
-            delete[] b;
-            delete[] c;
+
         }
     }
     

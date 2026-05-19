@@ -10,7 +10,7 @@ using real_t = float;
 #endif
 
 int main(){
-    const std::size_t N = 16777216*8;
+    const std::size_t N = 10000000;
     const real_t two_pi = static_cast<real_t>(2.0 * M_PI);
 
     std::vector<real_t> data(N);
@@ -21,6 +21,6 @@ int main(){
         data[i] = std::sin(two_pi * static_cast<real_t>(i) / static_cast<real_t>(N));
         sum += data[i];
     }
-    std::cout << std::fixed << std::setprecision(15)<< sum;
+    std::cout << std::fixed << std::setprecision(15)<< sum<< '\n';
     return 0;
 }

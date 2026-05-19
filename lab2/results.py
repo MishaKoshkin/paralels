@@ -146,9 +146,9 @@ def plot_slau(filename, output_image):
 def main():
     # Имена файлов (при необходимости измените)
     files = {
-        'vector-matrix_benchmark.txt': 'vector-matrix_speedup.png',
-        'integrate_benchmark.txt': 'integrate_speedup.png',
-        'slau-benchmark.txt': 'slau_speedup.png'
+        'build/vector-matrix_benchmark.txt': 'vector-matrix_speedup.png',
+        'build/integrate_benchmark.txt': 'integrate_speedup.png',
+        'build/slau-benchmark.txt': 'slau_speedup.png'
     }
     
     for infile, outfile in files.items():
