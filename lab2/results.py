@@ -141,6 +141,78 @@ def plot_slau(filename, output_image):
     print(f"Сохранён {output_image}")
 
 # ------------------------------------------------------------
+# 4. Обработка schedule_slau.txt: вывод таблицы и построение графика
+# ------------------------------------------------------------
+def process_schedule(filename, output_image=None):
+    """
+    Читает файл schedule_slau.txt формата:
+    # комментарии
+    schedule_type  time(s)  error
+    Возвращает словарь {schedule: время} и выводит таблицу.
+    Если задан output_image, строит столбчатую диаграмму.
+    """
+    schedules = []
+    times = []
+    errors = []
+    
+    with open(filename, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            # Предполагаем: schedule_type время error
+            sched = parts[0]
+            # время может быть как 0.123456, так и в научной нотации
+            try:
+                t = float(parts[1])
+                err = float(parts[2])
+            except ValueError:
+                continue
+            schedules.append(sched)
+            times.append(t)
+            errors.append(err)
+    
+    if not schedules:
+        print(f"Файл {filename} не содержит данных или имеет неверный формат.")
+        return
+    
+    # Вывод таблицы в консоль
+    print("\n" + "="*60)
+    print("Результаты исследования schedule (время выполнения, с)")
+    print("="*60)
+    print(f"{'Schedule':<20} {'Time (s)':<12} {'Error':<12}")
+    print("-"*60)
+    for sched, t, err in zip(schedules, times, errors):
+        # округление до тысячных
+        print(f"{sched:<20} {t:>10.3f}   {err:>10.2e}")
+    print("="*60)
+    
+    # Построение графика, если указан output_image
+    if output_image:
+        plt.figure(figsize=(10, 6))
+        # Цвета для разных типов расписаний
+        colors = plt.cm.tab20(np.linspace(0, 1, len(schedules)))
+        bars = plt.bar(schedules, times, color=colors, edgecolor='black')
+        plt.ylabel('Время выполнения (секунды)', fontsize=12)
+        plt.xlabel('Тип расписания (schedule)', fontsize=12)
+        plt.title('Сравнение времени решения СЛАУ для разных schedule', fontsize=14)
+        plt.xticks(rotation=45, ha='right')
+        plt.grid(axis='y', linestyle=':', alpha=0.7)
+        
+        # Добавление значений на столбцы (с округлением до тысячных)
+        for bar, t in zip(bars, times):
+            plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01 * max(times),
+                     f'{t:.3f}', ha='center', va='bottom', fontsize=9)
+        
+        plt.tight_layout()
+        plt.savefig(output_image, dpi=150)
+        plt.close()
+        print(f"Сохранён график schedule: {output_image}")
+
+# ------------------------------------------------------------
 # Главная функция
 # ------------------------------------------------------------
 def main():
@@ -177,6 +249,19 @@ def main():
             plot_slau(infile, outfile)
         else:
             print(f"Неизвестный формат файла {infile} (столбцов: {cols})")
+    
+    # Дополнительная обработка schedule_slau.txt, если файл существует
+    schedule_file = 'build/schedule_slau.txt'   # можно указать свой путь
+    schedule_image = 'schedule_comparison.png'
+    if os.path.exists(schedule_file):
+        process_schedule(schedule_file, schedule_image)
+    else:
+        # Попробуем в текущей директории
+        schedule_file_alt = 'schedule_slau.txt'
+        if os.path.exists(schedule_file_alt):
+            process_schedule(schedule_file_alt, schedule_image)
+        else:
+            print(f"\nФайл {schedule_file} не найден. Обработка schedule пропущена.")
 
 if __name__ == '__main__':
     main()

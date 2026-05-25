@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <omp.h>
+#include <algorithm> // для std::min_element
 
 // Размерность матрицы
 #define N_SIZE 5000
@@ -286,7 +287,8 @@ void solve_omp_schedule(const std::vector<double>& matrix, const std::vector<dou
 }
 
 double test_omp_schedule(const std::vector<double>& matrix, const std::vector<double>& rhs,
-                         int dim, const char* sched_type, double rhs_norm, int num_threads) {
+                         int dim, const char* sched_type, double rhs_norm, int num_threads,
+                         std::ofstream* out = nullptr) {
     std::vector<double> sol(dim, 0.0);
     double start = get_wall_time();
     solve_omp_schedule(matrix, rhs, sol, dim, sched_type, rhs_norm, num_threads);
@@ -299,6 +301,13 @@ double test_omp_schedule(const std::vector<double>& matrix, const std::vector<do
     }
     std::cout << "    Time: " << std::fixed << std::setprecision(4) << elapsed << " s"
               << ", error: " << std::scientific << max_err << "\n\n";
+
+    // Если передан указатель на файл, записываем в него
+    if (out != nullptr) {
+        *out << std::setw(20) << std::left << sched_type << " "
+             << std::fixed << std::setprecision(6) << elapsed << " "
+             << std::scientific << max_err << "\n";
+    }
     return elapsed;
 }
 
@@ -334,6 +343,9 @@ int main(int argc, char** argv) {
 
     double serial_time = test_serial(matrix, rhs, dim, rhs_norm);
 
+    // Вектор для хранения времени Split для каждого количества потоков
+    std::vector<double> split_times(num_configs);
+
     for (int idx = 0; idx < num_configs; ++idx) {
         int n_threads = threads_array[idx];
         omp_set_num_threads(n_threads);
@@ -341,6 +353,8 @@ int main(int argc, char** argv) {
         std::cout << "--- Testing with " << n_threads << " threads ---\n";
         double split_time = test_omp_split(matrix, rhs, dim, rhs_norm);
         double single_time = test_omp_single_region(matrix, rhs, dim, rhs_norm);
+
+        split_times[idx] = split_time;
 
         double speedup_split = serial_time / split_time;
         double speedup_single = serial_time / single_time;
@@ -350,8 +364,20 @@ int main(int argc, char** argv) {
     }
     outfile.close();
 
-    // Исследование schedule на 8 потоках
-    std::cout << "\n=== Schedule study (threads=8) ===\n\n";
+    // Определение оптимального числа потоков для Split (минимальное время)
+    auto min_it = std::min_element(split_times.begin(), split_times.end());
+    int best_split_threads = threads_array[std::distance(split_times.begin(), min_it)];
+    double best_split_time = *min_it;
+
+    std::cout << "\n=== Optimal threads for Split algorithm: " << best_split_threads
+              << " (time = " << std::fixed << std::setprecision(6) << best_split_time << " s) ===\n\n";
+
+    // Исследование schedule на оптимальном количестве потоков для Split
+    std::ofstream sched_file("schedule_slau.txt");
+    sched_file << "# Schedule study for Split algorithm\n";
+    sched_file << "# Optimal threads: " << best_split_threads << "\n";
+    sched_file << "# Schedule_type Time(s) Max_error\n";
+
     const char* schedules[] = {
         "static", "static,64", "static,128",
         "dynamic", "dynamic,64", "dynamic,128",
@@ -360,14 +386,18 @@ int main(int argc, char** argv) {
     };
     int num_schedules = sizeof(schedules) / sizeof(schedules[0]);
 
+    std::cout << "=== Schedule study (threads = " << best_split_threads << ") ===\n\n";
     std::cout << std::left << std::setw(20) << "Schedule"
               << " | Time (s) | Rel. norm\n";
     std::cout << std::string(55, '-') << "\n";
 
     for (int i = 0; i < num_schedules; ++i) {
-        test_omp_schedule(matrix, rhs, dim, schedules[i], rhs_norm, 8);
+        // Передаём указатель на файл для записи
+        test_omp_schedule(matrix, rhs, dim, schedules[i], rhs_norm, best_split_threads, &sched_file);
     }
+    sched_file.close();
 
     std::cout << "\nResults saved to slau-benchmark.txt\n";
+    std::cout << "Schedule study saved to schedule_slau.txt\n";
     return 0;
 }
