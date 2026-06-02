@@ -5,6 +5,7 @@
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <memory>
 #include <cstdlib>
 
 using namespace std;
@@ -51,17 +52,6 @@ void mult_part(const double* A, const double* x, double* y, int n, int start, in
 
 int main(){
     
-    cout << "\nИнформация о вычислительном узле:\n";
-    system("lscpu | grep -E 'Model name|CPU\\(s\\)|Thread\\(s\\) per core|Core\\(s\\) per socket|Socket\\(s\\)|L3 cache'");
-    cout << "\nМодель сервера:\n";
-    system("cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null || echo 'Недоступно'");
-    cout << "\nNUMA ноды:\n";
-    system("numactl --hardware 2>/dev/null | grep -A 10 'available' || echo 'numactl не установлен'");
-    cout << "\nОперативная память:\n";
-    system("free -h | grep Mem");
-    cout << "\nОперационная система:\n";
-    system("cat /etc/os-release | grep -E 'PRETTY_NAME|VERSION' | head -2");
-    
     vector<int> sizes = {20000, 40000};
     vector<int> threads_list = {1, 2, 4, 7, 8, 16, 20, 40};
     
@@ -77,37 +67,32 @@ int main(){
     for (int size : sizes){
         cout << "\nРазмер матрицы: " << size << "x" << size << "\n";
         
-        double* A = new double[(long long)size * size];
-        double* x = new double[size];
-        double* y = new double[size];
+        std::unique_ptr<double[]> A = std::make_unique<double[]>(size*size);
+        std::unique_ptr<double[]> x = std::make_unique<double[]>(size);
+        std::unique_ptr<double[]> y = std::make_unique<double[]>(size);
         
-        // Параллельная инициализация матрицы
-        cout << "  Генерация матрицы (параллельно, " << init_threads_count << " потока)..." << flush;
+        
         {
             vector<thread> init_threads;
             int rows_per_thread = size / init_threads_count;
             for (int t = 0; t < init_threads_count; ++t) {
                 int start = t * rows_per_thread;
                 int end = (t == init_threads_count-1) ? size : (t+1) * rows_per_thread;
-                init_threads.emplace_back(fill_matrix_part, A, size, start, end);
+                init_threads.emplace_back(fill_matrix_part, A.get(), size, start, end);
             }
             for (auto& th : init_threads) th.join();
         }
-        cout << "готово\n";
         
-        // Параллельная инициализация вектора (разобьём на те же части)
-        cout << "  Генерация вектора (параллельно)..." << flush;
         {
             vector<thread> init_threads;
             int elems_per_thread = size / init_threads_count;
             for (int t = 0; t < init_threads_count; ++t) {
                 int start = t * elems_per_thread;
                 int end = (t == init_threads_count-1) ? size : (t+1) * elems_per_thread;
-                init_threads.emplace_back(fill_vector_part, x, start, end);
+                init_threads.emplace_back(fill_vector_part, x.get(), start, end);
             }
             for (auto& th : init_threads) th.join();
         }
-        cout << "готово\n";
         
         double base_time = 0;
         
@@ -126,7 +111,7 @@ int main(){
                 for (int t = 0; t < threads; t++) {
                     int start = t * rows_per_thread;
                     int end = (t == threads-1) ? size : (t+1) * rows_per_thread;
-                    workers.emplace_back(mult_part, A, x, y, size, start, end);
+                    workers.emplace_back(mult_part, A.get(), x.get(), y.get(), size, start, end);
                 }
                 
                 for (auto& w : workers) w.join();
@@ -146,9 +131,6 @@ int main(){
                      << avg_time << " " << speedup << "\n";
         }
         
-        delete[] A;
-        delete[] x;
-        delete[] y;
     }
     
     data_file.close();
